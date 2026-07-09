@@ -107,7 +107,7 @@
         const finalScoreEl = document.getElementById('final-score');
 
         // Configurações Fixas do Jogo
-        const boardSize = 16;       // 4x4
+        const boardSize = 16;       // Grelha de 4x4
         const previewTime = 1200;   // Tempo inicial para memorizar (1.2 segundos)
         const errorDelay = 800;     // Tempo para desvirar cartas erradas
         const penaltyAmount = 5;    // Penalização por erro
@@ -120,7 +120,7 @@
         let matchedPairs = 0;
         let score = 0;
 
-        // Algoritmo para baralhar as cartas
+        // Algoritmo para baralhar as cartas (Fisher-Yates)
         function shuffle(array) {
             for (let i = array.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -176,7 +176,7 @@
             }
         }
 
-        // Renderizar Cartas
+        // Renderizar Cartas no Tabuleiro
         function drawBoard() {
             cardGrid.innerHTML = '';
 
@@ -188,11 +188,14 @@
                 // Construção com a imagem anexada na frente da carta
                 cardContainer.innerHTML = `
                     <div class="card-inner w-full h-full">
-                        <!-- Frente da Carta (Oculta o emoji - Mostra a imagem com fallback de texto) -->
+                        <!-- Frente da Carta (Oculta o emoji - Mostra o logótipo Mistura SENAC com alternativa robusta) -->
                         <div class="card-front w-full h-full bg-[#e85445] border-2 border-[#d14436] flex items-center justify-center shadow-sm overflow-hidden hover:scale-105 transition-all duration-150">
-                            <img src="image_d41a95.png" alt="Mistura SENAC" class="w-full h-full object-contain p-2" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                            <!-- Caso a imagem falhe a carregar por algum motivo, mostra este texto elegante -->
-                            <span class="hidden text-white font-extrabold tracking-wider text-[11px] sm:text-xs uppercase">Mistura</span>
+                            <img src="image_df86df.png" alt="Mistura SENAC" class="w-full h-full object-contain p-2" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <!-- Caso a imagem demore ou falhe a carregar, exibe esta alternativa perfeitamente estilizada -->
+                            <div class="hidden flex-col items-center justify-center text-white">
+                                <span class="font-bold tracking-wider text-sm uppercase">Mistura</span>
+                                <span class="text-[9px] tracking-widest text-orange-200 uppercase font-medium">SENAC</span>
+                            </div>
                         </div>
                         <!-- Traseira da Carta (Emoji revelado) -->
                         <div class="card-back w-full h-full bg-white border-2 border-indigo-600 flex items-center justify-center text-4xl shadow-md">
@@ -232,7 +235,7 @@
             const [card1, card2] = flippedCards;
 
             if (card1.data.emoji === card2.data.emoji) {
-                // Sucesso
+                // Sucesso: encontrou o par
                 card1.data.matched = true;
                 card2.data.matched = true;
                 
@@ -259,7 +262,7 @@
                     }, 600);
                 }
             } else {
-                // Erro
+                // Erro: cartas diferentes
                 score = Math.max(0, score - penaltyAmount);
                 gameScoreEl.textContent = score;
 
