@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Memória - Mistura de Frutas</title>
+    <!-- Tailwind CSS para um design moderno e responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons para o ecrã de vitória -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        
+        /* Efeito de rotação 3D para as cartas */
+        .card-container {
+            perspective: 1000px;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+        .flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 1rem;
+        }
+        .card-back {
+            transform: rotateY(180deg);
+        }
+    </style>
+</head>
+<body class="bg-white text-slate-800 min-h-screen flex flex-col justify-center items-center p-4">
+
+    <!-- Container Principal Centralizado -->
+    <div class="w-full max-w-xl flex flex-col items-center">
+        
+        <!-- HUD Minimalista Superior -->
+        <div class="w-full flex justify-between items-center mb-8 px-2 max-w-[480px]">
+            <div class="flex flex-col">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pares</span>
+                <span id="pairs-found" class="text-lg font-bold text-slate-800">0 / 8</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Cliques</span>
+                <span id="click-counter" class="text-lg font-bold text-slate-800">0</span>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pontos</span>
+                <span id="game-score" class="text-lg font-bold text-emerald-600">0</span>
+            </div>
+        </div>
+
+        <!-- Área do Jogo com as Cartas -->
+        <div class="relative w-full flex items-center justify-center min-h-[380px]">
+            
+            <!-- Ecrã de Vitória -->
+            <div id="victory-screen" class="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center hidden z-20">
+                <div class="text-center p-6 max-w-sm">
+                    <div class="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
+                        <i data-lucide="party-popper" class="w-8 h-8"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-1">Parabéns! 🎉</h3>
+                    <p class="text-sm text-slate-500 mb-2">Encontraste todos os pares!</p>
+                    <p class="text-xs text-slate-400 mb-6">Fizeste <span id="final-clicks" class="font-bold text-indigo-600">0</span> cliques e marcaste <span id="final-score" class="font-bold text-emerald-600">0</span> pontos.</p>
+                    <button onclick="restartGame()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-6 rounded-xl transition duration-150 shadow-md flex items-center justify-center gap-2 mx-auto">
+                        Jogar Novamente
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grelha de Cartas -->
+            <div id="card-grid" class="grid grid-cols-4 gap-3.5 w-full max-w-[480px] mx-auto">
+                <!-- Gerado dinamicamente via JS -->
+            </div>
+        </div>
+
+        <!-- Botão de Reinício Rápido -->
+        <button onclick="restartGame()" class="mt-8 text-xs font-medium text-slate-400 hover:text-slate-600 transition flex items-center gap-1.5 py-2 px-4 rounded-lg hover:bg-slate-100">
+            Reiniciar Jogo
+        </button>
+    </div>
+
+    <!-- LÓGICA DO JOGO DA MEMÓRIA -->
+    <script>
+        // Configuração de Emojis
+        const FRUIT_POOL = ['🍓', '🍌', '🍉', '🍊', '🍍', '🍇', '🍒', '🥝'];
+
+        // Seletores
+        const cardGrid = document.getElementById('card-grid');
+        const clickCounterEl = document.getElementById('click-counter');
+        const pairsFoundEl = document.getElementById('pairs-found');
+        const gameScoreEl = document.getElementById('game-score');
+        const victoryScreen = document.getElementById('victory-screen');
+        const finalClicksEl = document.getElementById('final-clicks');
+        const finalScoreEl = document.getElementById('final-score');
+
+        // Configurações Fixas do Jogo
+        const boardSize = 16;       // 4x4
+        const previewTime = 1200;   // Tempo inicial para memorizar (1.2 segundos)
+        const errorDelay = 800;     // Tempo para desvirar cartas erradas
+        const penaltyAmount = 5;    // Penalização por erro
+
+        // Estado interno do jogo
+        let cardsData = [];
+        let flippedCards = [];
+        let isLock = false;
+        let clickCount = 0;
+        let matchedPairs = 0;
+        let score = 0;
+
+        // Algoritmo para baralhar as cartas
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Iniciar ou Reiniciar o Jogo
+        function restartGame() {
+            clickCount = 0;
+            matchedPairs = 0;
+            score = 0;
+            flippedCards = [];
+            isLock = false;
+            
+            clickCounterEl.textContent = clickCount;
+            pairsFoundEl.textContent = `0 / ${boardSize / 2}`;
+            gameScoreEl.textContent = score;
+            victoryScreen.classList.add('hidden');
+
+            // Preparar baralho de pares
+            const numPairs = boardSize / 2;
+            const chosenFruits = shuffle([...FRUIT_POOL]).slice(0, numPairs);
+            
+            let deck = [];
+            chosenFruits.forEach((fruit, index) => {
+                deck.push({ id: index * 2, emoji: fruit, matched: false });
+                deck.push({ id: index * 2 + 1, emoji: fruit, matched: false });
+            });
+
+            deck = shuffle(deck);
+            cardsData = deck;
+
+            drawBoard();
+
+            // Espreitadela rápida inicial
+            if (previewTime > 0) {
+                isLock = true;
+                const cardElements = document.querySelectorAll('.card-container');
+                cardElements.forEach(el => el.classList.add('flipped'));
+
+                setTimeout(() => {
+                    cardElements.forEach(el => {
+                        const cardId = parseInt(el.dataset.id);
+                        const cardObj = cardsData.find(c => c.id === cardId);
+                        if (cardObj && !cardObj.matched) {
+                            el.classList.remove('flipped');
+                        }
+                    });
+                    isLock = false;
+                }, previewTime);
+            }
+        }
+
+        // Renderizar Cartas
+        function drawBoard() {
+            cardGrid.innerHTML = '';
+
+            cardsData.forEach(card => {
+                const cardContainer = document.createElement('div');
+                cardContainer.className = "card-container aspect-square cursor-pointer h-24 sm:h-28";
+                cardContainer.dataset.id = card.id;
+
+                // Construção com a imagem anexada na frente da carta
+                cardContainer.innerHTML = `
+                    <div class="card-inner w-full h-full">
+                        <!-- Frente da Carta (Oculta o emoji - Mostra a imagem com fallback de texto) -->
+                        <div class="card-front w-full h-full bg-[#e85445] border-2 border-[#d14436] flex items-center justify-center shadow-sm overflow-hidden hover:scale-105 transition-all duration-150">
+                            <img src="image_d41a95.png" alt="Mistura SENAC" class="w-full h-full object-contain p-2" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <!-- Caso a imagem falhe a carregar por algum motivo, mostra este texto elegante -->
+                            <span class="hidden text-white font-extrabold tracking-wider text-[11px] sm:text-xs uppercase">Mistura</span>
+                        </div>
+                        <!-- Traseira da Carta (Emoji revelado) -->
+                        <div class="card-back w-full h-full bg-white border-2 border-indigo-600 flex items-center justify-center text-4xl shadow-md">
+                            <span>${card.emoji}</span>
+                        </div>
+                    </div>
+                `;
+
+                cardContainer.addEventListener('click', () => {
+                    handleCardFlip(cardContainer, card);
+                });
+
+                cardGrid.appendChild(cardContainer);
+            });
+        }
+
+        // Lógica ao clicar numa carta
+        function handleCardFlip(element, cardObj) {
+            if (isLock) return;
+            if (element.classList.contains('flipped')) return;
+            if (cardObj.matched) return;
+
+            element.classList.add('flipped');
+            flippedCards.push({ element, data: cardObj });
+
+            clickCount++;
+            clickCounterEl.textContent = clickCount;
+
+            if (flippedCards.length === 2) {
+                checkMatch();
+            }
+        }
+
+        // Comparar o par escolhido
+        function checkMatch() {
+            isLock = true;
+            const [card1, card2] = flippedCards;
+
+            if (card1.data.emoji === card2.data.emoji) {
+                // Sucesso
+                card1.data.matched = true;
+                card2.data.matched = true;
+                
+                setTimeout(() => {
+                    card1.element.querySelector('.card-back').classList.add('border-emerald-500');
+                    card2.element.querySelector('.card-back').classList.add('border-emerald-500');
+                }, 200);
+
+                score += 50;
+                gameScoreEl.textContent = score;
+
+                matchedPairs++;
+                pairsFoundEl.textContent = `${matchedPairs} / ${boardSize / 2}`;
+
+                flippedCards = [];
+                isLock = false;
+
+                if (matchedPairs === boardSize / 2) {
+                    setTimeout(() => {
+                        finalClicksEl.textContent = clickCount;
+                        finalScoreEl.textContent = score;
+                        victoryScreen.classList.remove('hidden');
+                        lucide.createIcons();
+                    }, 600);
+                }
+            } else {
+                // Erro
+                score = Math.max(0, score - penaltyAmount);
+                gameScoreEl.textContent = score;
+
+                setTimeout(() => {
+                    card1.element.querySelector('.card-back').classList.add('border-red-500');
+                    card2.element.querySelector('.card-back').classList.add('border-red-500');
+                }, 150);
+
+                setTimeout(() => {
+                    card1.element.classList.remove('flipped');
+                    card2.element.classList.remove('flipped');
+                    
+                    card1.element.querySelector('.card-back').classList.remove('border-red-500');
+                    card2.element.querySelector('.card-back').classList.remove('border-red-500');
+
+                    flippedCards = [];
+                    isLock = false;
+                }, errorDelay);
+            }
+        }
+
+        // Carregar o jogo no início
+        window.onload = function() {
+            restartGame();
+        };
+    </script>
+</body>
+</html>
